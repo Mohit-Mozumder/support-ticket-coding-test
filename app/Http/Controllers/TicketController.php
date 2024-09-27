@@ -1,9 +1,14 @@
 <?php
 
 namespace App\Http\Controllers;
+
+use App\Mail\TicketCreatedMail;
+use App\Mail\TicketClosedMail;
+use Illuminate\Support\Facades\Mail;
 use App\Models\Ticket;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\Request;
+use App\Models\User;
 
 class TicketController extends Controller
 
@@ -32,16 +37,29 @@ class TicketController extends Controller
             'message' => 'required|string',
         ]);
     
-        Auth::user()->tickets()->create($request->only('subject', 'message'));
+        // Create a new ticket for the authenticated customer
+        $ticket = Auth::user()->tickets()->create($request->only('subject', 'message'));
     
-        return redirect()->route('tickets.index')->with('success', 'Ticket created successfully!');
+        // Find the admin email (assuming there's a single admin)
+        $admin = User::where('role', 'admin')->first();  // Change this to get all admins if necessary
+    
+        // Send the email to the admin using Mailpit
+        if ($admin) {
+            Mail::to($admin->email)->send(new TicketCreatedMail($ticket));
+        }
+    
+        return redirect()->route('tickets.index')->with('success', 'Ticket created successfully! The admin has been notified.');
     }
-    
+
     public function close(Ticket $ticket)
     {
+        // Update the ticket status to 'closed'
         $ticket->update(['status' => 'closed']);
     
-        return redirect()->route('admin.tickets.index')->with('success', 'Ticket closed successfully!');
+        // Send a closure email to the customer
+        Mail::to($ticket->user->email)->send(new TicketClosedMail($ticket));
+    
+        return redirect()->route('admin.index')->with('success', 'Ticket closed and customer notified!');
     }
     
 }
